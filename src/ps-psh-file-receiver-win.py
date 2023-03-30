@@ -2,7 +2,6 @@ import json
 import os
 import re
 import socket
-import struct
 import sys
 import tkinter as tk
 from tkinter import filedialog as fd
@@ -11,7 +10,6 @@ from tkinter import messagebox as mb
 MAGIC = 0x0000EA6E
 PORT = 9045
 
-
 def getCurrentDirectory():
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
@@ -19,18 +17,24 @@ def getCurrentDirectory():
 
 def choosedirectory():
     directory = fd.askdirectory()
-    choose_folder_box.delete(0, tk.END)
-    choose_folder_box.insert(0, directory + "/")
+
+    # Check if location is not emtpy
+    if os.path.exists(directory):
+        choose_folder_box.delete(0, tk.END)
+        choose_folder_box.insert(0, directory + "/")
+    else:
+        mb.showerror("Error", "Invalid folder location!")
 
 def recievefile():
     # Disable button while downloading
     recievefile_button.config(state="disabled")
 
-    file = choose_folder_box.get() + "PS-PSH-OUTPUT"
+    # Get chosen target directory
+    directory = choose_folder_box.get()
 
-    # Warn user if file already exists
-    if os.path.exists(file):
-        mb.showerror("Error", "The file PS-PSH-OUTPUT already exists in your chosen directory!\n\nPlease remove the file or choose a different folder.")
+    # Validate directory
+    if not os.path.exists(directory):
+        mb.showerror("Error", "Invalid folder location!")
         recievefile_button.config(state="normal")
         return
 
@@ -46,6 +50,9 @@ def recievefile():
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(3)
         sock.connect((ip, PORT))
+
+        # Receive filename
+        file = directory + sock.recv(128).decode('UTF-8')
 
         # Download file in chunks
         with open(file, 'wb') as f:
@@ -79,13 +86,10 @@ def recievefile():
 if __name__ == "__main__":
     window = tk.Tk()
 
-    # Remove menu bar on top
-    window.config(menu=tk.Menu(window))
-
-    window.geometry("400x100")
+    window.geometry("380x125")
     window.resizable(False, False)
 
-    window.title("PS-PSH File Receiver v0.1.0")
+    window.title("PS-PSH File Receiver v0.1.1")
 
     choose_folder_box = tk.Entry(window, width=42)
     choose_folder = tk.Button(window, text="Select Folder", command=choosedirectory)

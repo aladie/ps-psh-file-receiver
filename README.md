@@ -9,11 +9,9 @@ Use a GUI:
 Use the command promt:
 - (Python Script) Download /src/ps-psh-receiver-command.py
 
-Either of these methods will crerate a file called _PS-PSH-OUTPUT_ in your choosen directory.
 
-_Currently you will have to add the filename and file extention yourself._
+Either of these methods will create a file with the corresponding filename and file extension in your choosen directory.
 
 # Next Steps
-- Support the transmission of the filename and file extention
 - Support the transmission of multiple files (Directories)
 - Improve the Windows version of the GUI to eliminate false Antivirus positives
