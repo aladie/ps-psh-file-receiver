@@ -7,8 +7,7 @@ import tkinter as tk
 from tkinter import filedialog as fd
 from tkinter import messagebox as mb
 
-MAGIC = 0x0000EA6E
-PORT = 9045
+DATA_PORT = 9046
 
 def getCurrentDirectory():
     if getattr(sys, 'frozen', False):
@@ -30,10 +29,10 @@ def recievefile():
     recievefile_button.config(state="disabled")
 
     # Get chosen target directory
-    directory = choose_folder_box.get()
+    origin_directory = choose_folder_box.get()
 
     # Validate directory
-    if not os.path.exists(directory):
+    if not os.path.exists(origin_directory):
         mb.showerror("Error", "Invalid folder location!")
         recievefile_button.config(state="normal")
         return
@@ -47,26 +46,87 @@ def recievefile():
 
     try:
         # Connect to console
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(3)
-        sock.connect((ip, PORT))
+        data_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        data_sock.settimeout(3)
+        data_sock.connect((ip, DATA_PORT))
 
-        # Receive filename
-        file = directory + sock.recv(128).decode('UTF-8')
+        # Receive data_type of send bytes (file/directory/end)
+        data_type = data_sock.recv(1).decode('UTF-8')
 
-        # Download file in chunks
-        with open(file, 'wb') as f:
-            while True:
-                data = sock.recv(4096)
+        current_directory = origin_directory
 
-                if data == b'':
-                    f.close()
-                    break
+        # Keep receiving until exit command was received
+        while data_type != 'e':
 
-                f.write(data)
+            if data_type == 'd':
+                # Receive directory name and create new directory
+                temp_dir = data_sock.recv(128).decode('UTF-8')
+                new_directory = current_directory
+
+                for i in range(0, 128):
+                    if temp_dir[i] == '/':
+                        new_directory += '/'
+                        break
+
+                    new_directory += temp_dir[i]
+
+                # Notify console that the new directory was created successfully
+                data_sock.sendall(b'D_OK')
+
+                try:
+                    os.makedirs(new_directory)
+                except FileExistsError:
+                    print("Folder already exists!")
+
+                current_directory = new_directory
+            elif data_type == 'r':
+                # Go up in the directory tree
+                current_directory = current_directory[0:current_directory.rfind('/')]
+                current_directory = current_directory[0:current_directory.rfind('/') + 1]
+
+            elif data_type == 'f':
+                # Receive infos
+                temp_info = data_sock.recv(20).decode('UTF-8')
+                temp_length = ''
+
+                for i in range(0, 20):
+                    if temp_info[i] == 'R':
+                        break
+
+                    temp_length += str(int(temp_info[i]))
+
+                filename_length = int(temp_length)
+
+                # Receive filename
+                filename = data_sock.recv(filename_length).decode('UTF-8')
+
+                file = current_directory + filename
+
+                # Notify console of successfull filename transfer
+                data_sock.sendall(b'F_OK')
+
+                # Download file in chunks
+                with open(file, 'wb') as f:
+                    while True:
+                        # VERY EXPERIMENTAL WAY OF CLOSING THE FILE!!
+                        try:
+                            data = data_sock.recv(4096)
+                        except socket.timeout:
+                            f.close()
+                            break
+
+                        f.write(data)
+
+                # Notify console of possible successfull file transfer
+                data_sock.sendall(b'R_OK')
+            else:
+                mb.showerror("Error", "Something broke while communicating with the console")
+
+            # Receive data_type of send bytes (file/directory/end)
+            data_type = data_sock.recv(1).decode('UTF-8')
 
         # Close connection
-        sock.close()
+        data_sock.close()
 
         # Save values to config
         with open(os.path.join(getCurrentDirectory(), 'ps-psh-file-receiver.json'), 'w') as f:
@@ -79,6 +139,9 @@ def recievefile():
 
         # Re-enable button after download finished
         recievefile_button.config(state="normal")
+
+    except socket.timeout:
+        mb.showerror("Error", "Timeout")
     except socket.error:
         mb.showerror("Error", "Failed to connect!")
         recievefile_button.config(state="normal")
@@ -89,7 +152,7 @@ if __name__ == "__main__":
     window.geometry("380x125")
     window.resizable(False, False)
 
-    window.title("PS-PSH File Receiver v0.1.1")
+    window.title("PS-PSH File Receiver v0.1.2")
 
     choose_folder_box = tk.Entry(window, width=42)
     choose_folder = tk.Button(window, text="Select Folder", command=choosedirectory)
